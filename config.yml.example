@@ -1,0 +1,10 @@
+bot:
+  tg-bot-token: "123456:ABC-your-bot-token"
+  tg-chat-ids:              # List of chat/user IDs to send notifications to
+    - 123456789
+    - 987654321
+
+marstek:
+  device-ip: "192.168.1.100"   # Static IP of Venus-A on LAN
+  udp-port: 30000               # UDP port enabled in Marstek app
+  poll-interval-seconds: 30     # How often to poll the device

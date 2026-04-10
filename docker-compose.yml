@@ -1,0 +1,12 @@
+version: "3.9"
+
+services:
+  marstek-venus-bot:
+    build: .
+    container_name: marstek-venus-bot
+    volumes:
+      - ./config.yml:/config.yml:ro
+    restart: unless-stopped
+    environment:
+      JAVA_OPTS: "-Xmx256m"
+    network_mode: host   # Required for UDP LAN access to Marstek device
