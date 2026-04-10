@@ -24,6 +24,7 @@ class GridMonitor(
     @Volatile private var lastGridState: GridState = GridState.UNKNOWN
     @Volatile private var lastNotifiedSocThreshold: Int? = null
     @Volatile private var previousSoc: Int? = null
+    @Volatile private var wasDisconnected: Boolean = false
 
     fun start(scope: CoroutineScope) {
         scope.launch(Dispatchers.IO) {
@@ -94,8 +95,9 @@ class GridMonitor(
 
     private fun handleGridStateTransition(currentState: GridState, soc: Int) {
         when {
-            lastGridState != GridState.DISCONNECTED && currentState == GridState.DISCONNECTED -> {
+            !wasDisconnected && currentState == GridState.DISCONNECTED -> {
                 log.info("Grid state transition: {} -> DISCONNECTED", lastGridState)
+                wasDisconnected = true
                 lastNotifiedSocThreshold = (soc / 10) * 10
                 notifier.send(
                     "⚡ POWER OUTAGE DETECTED\n" +
@@ -103,8 +105,9 @@ class GridMonitor(
                     "🔋 Battery: $soc%"
                 )
             }
-            lastGridState == GridState.DISCONNECTED && currentState == GridState.CONNECTED -> {
-                log.info("Grid state transition: DISCONNECTED -> CONNECTED")
+            wasDisconnected && currentState == GridState.CONNECTED -> {
+                log.info("Grid state transition: DISCONNECTED -> CONNECTED (via {})", lastGridState)
+                wasDisconnected = false
                 lastNotifiedSocThreshold = null
                 notifier.send(
                     "✅ GRID RESTORED\n" +
