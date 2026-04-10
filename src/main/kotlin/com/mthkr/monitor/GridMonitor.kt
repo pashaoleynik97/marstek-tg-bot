@@ -99,20 +99,22 @@ class GridMonitor(
                 log.info("Grid state transition: {} -> DISCONNECTED", lastGridState)
                 wasDisconnected = true
                 lastNotifiedSocThreshold = (soc / 10) * 10
-                notifier.send(
+                notifier.sendWithPhoto(
                     "⚡ POWER OUTAGE DETECTED\n" +
                     "Grid connection lost!\n" +
-                    "🔋 Battery: $soc%"
+                    "🔋 Battery: $soc%",
+                    "/img/dead_bot.jpeg"
                 )
             }
             wasDisconnected && currentState == GridState.CONNECTED -> {
                 log.info("Grid state transition: DISCONNECTED -> CONNECTED (via {})", lastGridState)
                 wasDisconnected = false
                 lastNotifiedSocThreshold = null
-                notifier.send(
+                notifier.sendWithPhoto(
                     "✅ GRID RESTORED\n" +
                     "Power is back!\n" +
-                    "🔋 Battery: $soc%"
+                    "🔋 Battery: $soc%",
+                    "/img/alive_bot.jpg"
                 )
             }
             else -> {
