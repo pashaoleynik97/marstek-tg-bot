@@ -36,7 +36,7 @@ class MarstekClient(
                 socket.receive(receivePacket)
 
                 val responseJson = String(receivePacket.data, 0, receivePacket.length, Charsets.UTF_8)
-                log.debug("Response from {}: {}", deviceIp, responseJson)
+                log.info("Raw response from {}: {}", deviceIp, responseJson)
                 json.decodeFromString(RpcResponse.serializer(), responseJson)
             }
         } catch (e: SocketTimeoutException) {
@@ -51,7 +51,7 @@ class MarstekClient(
     fun getEsStatus(): ESGetStatusResult? {
         val response = sendRequest("ES.GetStatus") ?: return null
         val result = response.result ?: run {
-            log.warn("ES.GetStatus returned no result")
+            log.warn("ES.GetStatus returned no result. Error field: {}", response.error)
             return null
         }
         return try {
