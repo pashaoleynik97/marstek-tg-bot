@@ -29,7 +29,8 @@ data class ESGetStatusResult(
     val ongrid_power: Int? = null,
     val offgrid_power: Int? = null,
     val bat_power: Int? = null,
-    val bat_cap: Int? = null
+    val bat_cap: Int? = null,
+    val total_grid_input_energy: Int? = null
 )
 
 @Serializable

@@ -23,6 +23,7 @@ class GridMonitor(
 
     @Volatile private var lastGridState: GridState = GridState.UNKNOWN
     @Volatile private var lastNotifiedSocThreshold: Int? = null
+    @Volatile private var previousTotalGridInputEnergy: Int? = null
 
     fun start(scope: CoroutineScope) {
         scope.launch(Dispatchers.IO) {
@@ -50,25 +51,44 @@ class GridMonitor(
             return
         }
 
-        val currentGridState = determineGridState(status.ongrid_power, status.offgrid_power)
-        log.debug("Poll result: gridState={}, soc={}%, ongrid={}W, offgrid={}W",
-            currentGridState, soc, status.ongrid_power, status.offgrid_power)
+        val currentGridState = determineGridState(
+            status.ongrid_power, status.offgrid_power, status.total_grid_input_energy
+        )
+        log.debug(
+            "Poll result: gridState={}, soc={}%, ongrid={}W, offgrid={}W, gridEnergy={}Wh (prev={}Wh)",
+            currentGridState, soc, status.ongrid_power, status.offgrid_power,
+            status.total_grid_input_energy, previousTotalGridInputEnergy
+        )
 
         handleGridStateTransition(currentGridState, soc)
         handleBatteryThresholds(currentGridState, soc)
 
         lastGridState = currentGridState
+        previousTotalGridInputEnergy = status.total_grid_input_energy ?: previousTotalGridInputEnergy
     }
 
-    private fun determineGridState(ongridPower: Int?, offgridPower: Int?): GridState {
+    /**
+     * Grid state detection strategy:
+     *
+     * 1. ongrid_power != 0 → unambiguously CONNECTED (inverter actively exchanging with grid)
+     * 2. offgrid_power == 0 → no load at all, device idle → CONNECTED
+     * 3. offgrid_power > 0 AND ongrid_power == 0 → ambiguous: could be bypass mode or real outage
+     *    - Use total_grid_input_energy delta: if it increased since last poll, grid is feeding the
+     *      bypass circuit → CONNECTED. If it didn't increase, battery is supplying the load → DISCONNECTED.
+     *    - On first boot (no previous energy reading) → UNKNOWN until baseline is established.
+     */
+    private fun determineGridState(ongridPower: Int?, offgridPower: Int?, totalGridInputEnergy: Int?): GridState {
+        if (ongridPower != null && ongridPower != 0) return GridState.CONNECTED
+        if (offgridPower == null || offgridPower == 0) return GridState.CONNECTED
+
+        // offgrid > 0, ongrid == 0: bypass mode or real outage — check energy counter
+        val prev = previousTotalGridInputEnergy
+        val curr = totalGridInputEnergy
+
         return when {
-            offgridPower != null && offgridPower > 0 && (ongridPower == null || ongridPower == 0) ->
-                GridState.DISCONNECTED
-            ongridPower != null && ongridPower != 0 ->
-                GridState.CONNECTED
-            offgridPower == null || offgridPower == 0 ->
-                GridState.CONNECTED
-            else -> GridState.UNKNOWN
+            prev == null -> GridState.UNKNOWN          // first poll, establishing baseline
+            curr != null && curr > prev -> GridState.CONNECTED    // energy increasing → bypass
+            else -> GridState.DISCONNECTED             // energy flat → battery supplying load
         }
     }
 
