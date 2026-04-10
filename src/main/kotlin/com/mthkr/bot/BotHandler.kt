@@ -37,10 +37,10 @@ fun buildBot(
                 return@command
             }
 
+            // UNKNOWN means SoC is flat (bypass mode) — no confirmed outage, so display as connected
             val gridStateLabel = when (gridStateProvider()) {
-                GridState.CONNECTED -> "✅ Connected"
+                GridState.CONNECTED, GridState.UNKNOWN -> "✅ Connected"
                 GridState.DISCONNECTED -> "❌ Disconnected"
-                GridState.UNKNOWN -> "❓ Unknown"
             }
 
             val soc = status.bat_soc ?: "N/A"
