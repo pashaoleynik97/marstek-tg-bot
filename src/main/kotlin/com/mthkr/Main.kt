@@ -2,6 +2,7 @@ package com.mthkr
 
 import com.mthkr.bot.buildBot
 import com.mthkr.config.loadConfig
+import com.mthkr.db.GridStateRepository
 import com.mthkr.marstek.MarstekClient
 import com.mthkr.monitor.GridMonitor
 import com.mthkr.monitor.GridState
@@ -47,10 +48,13 @@ fun main(args: Array<String>) {
 
     val notifier = Notifier(bot = bot, chatIds = chatIds)
 
+    val repository = GridStateRepository(config.database.dbPath)
+
     val monitor = GridMonitor(
         client = marstekClient,
         notifier = notifier,
-        pollIntervalSeconds = config.marstek.pollIntervalSeconds
+        pollIntervalSeconds = config.marstek.pollIntervalSeconds,
+        repository = repository
     )
     gridMonitor = monitor
 

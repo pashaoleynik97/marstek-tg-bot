@@ -6,6 +6,7 @@ services:
     container_name: marstek-venus-bot
     volumes:
       - ./config.yml:/config.yml:ro
+      - ./data:/app/data
     restart: unless-stopped
     environment:
       JAVA_OPTS: "-Xmx256m"

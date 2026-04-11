@@ -8,7 +8,13 @@ import java.io.File
 @Serializable
 data class AppConfig(
     val bot: BotConfig,
-    val marstek: MarstekConfig
+    val marstek: MarstekConfig,
+    val database: DatabaseConfig = DatabaseConfig()
+)
+
+@Serializable
+data class DatabaseConfig(
+    @SerialName("db-path") val dbPath: String = "data/grid_state.db"
 )
 
 @Serializable

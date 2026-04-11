@@ -1,5 +1,6 @@
 package com.mthkr.monitor
 
+import com.mthkr.db.GridStateRepository
 import com.mthkr.marstek.MarstekClient
 import com.mthkr.notifications.Notifier
 import kotlinx.coroutines.CoroutineScope
@@ -17,7 +18,8 @@ enum class GridState {
 class GridMonitor(
     private val client: MarstekClient,
     private val notifier: Notifier,
-    private val pollIntervalSeconds: Long
+    private val pollIntervalSeconds: Long,
+    private val repository: GridStateRepository
 ) {
     private val log = LoggerFactory.getLogger(GridMonitor::class.java)
 
@@ -94,15 +96,24 @@ class GridMonitor(
     }
 
     private fun handleGridStateTransition(currentState: GridState, soc: Int) {
+        val now = System.currentTimeMillis()
         when {
             !wasDisconnected && currentState == GridState.DISCONNECTED -> {
                 log.info("Grid state transition: {} -> DISCONNECTED", lastGridState)
                 wasDisconnected = true
                 lastNotifiedSocThreshold = (soc / 10) * 10
+
+                val prevConnectedAt = repository.findMostRecentTimestamp(GridState.CONNECTED)
+                val durationLine = if (prevConnectedAt != null) {
+                    "\n⏱ Electricity was available for ${formatDuration(now - prevConnectedAt)}"
+                } else ""
+
+                repository.record(GridState.DISCONNECTED, now)
                 notifier.sendWithPhoto(
                     "⚡ POWER OUTAGE DETECTED\n" +
                     "Grid connection lost!\n" +
-                    "🔋 Battery: $soc%",
+                    "🔋 Battery: $soc%" +
+                    durationLine,
                     "/img/dead_bot.jpeg"
                 )
             }
@@ -110,10 +121,18 @@ class GridMonitor(
                 log.info("Grid state transition: DISCONNECTED -> CONNECTED (via {})", lastGridState)
                 wasDisconnected = false
                 lastNotifiedSocThreshold = null
+
+                val prevDisconnectedAt = repository.findMostRecentTimestamp(GridState.DISCONNECTED)
+                val durationLine = if (prevDisconnectedAt != null) {
+                    "\n⏱ Outage was for ${formatDuration(now - prevDisconnectedAt)}"
+                } else ""
+
+                repository.record(GridState.CONNECTED, now)
                 notifier.sendWithPhoto(
                     "✅ GRID RESTORED\n" +
                     "Power is back!\n" +
-                    "🔋 Battery: $soc%",
+                    "🔋 Battery: $soc%" +
+                    durationLine,
                     "/img/alive_bot.jpg"
                 )
             }
@@ -123,6 +142,14 @@ class GridMonitor(
                 }
             }
         }
+    }
+
+    private fun formatDuration(millis: Long): String {
+        val totalSeconds = millis / 1000
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
+        val seconds = totalSeconds % 60
+        return "%02d:%02d:%02d".format(hours, minutes, seconds)
     }
 
     private fun handleBatteryThresholds(currentState: GridState, soc: Int) {
