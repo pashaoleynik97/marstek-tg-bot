@@ -30,6 +30,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
     implementation("com.charleskorn.kaml:kaml:0.57.0")
     implementation("org.slf4j:slf4j-simple:2.0.12")
+    implementation("org.xerial:sqlite-jdbc:3.47.1.0")
     testImplementation(kotlin("test"))
 }
 
