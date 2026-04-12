@@ -15,6 +15,8 @@ enum class GridState {
     UNKNOWN
 }
 
+private const val DISCONNECTED_CONFIRM_POLLS = 2
+
 class GridMonitor(
     private val client: MarstekClient,
     private val notifier: Notifier,
@@ -27,6 +29,8 @@ class GridMonitor(
     @Volatile private var lastNotifiedSocThreshold: Int? = null
     @Volatile private var previousSoc: Int? = null
     @Volatile private var wasDisconnected: Boolean = false
+    /** Consecutive polls that returned DISCONNECTED. Reset to 0 on any non-DISCONNECTED result. */
+    @Volatile private var disconnectedConsecutiveCount: Int = 0
 
     fun start(scope: CoroutineScope) {
         scope.launch(Dispatchers.IO) {
@@ -96,9 +100,18 @@ class GridMonitor(
     }
 
     private fun handleGridStateTransition(currentState: GridState, soc: Int) {
+        if (currentState == GridState.DISCONNECTED) {
+            disconnectedConsecutiveCount++
+        } else {
+            disconnectedConsecutiveCount = 0
+        }
+
+        val confirmedDisconnected = currentState == GridState.DISCONNECTED &&
+                disconnectedConsecutiveCount >= DISCONNECTED_CONFIRM_POLLS
+
         val now = System.currentTimeMillis()
         when {
-            !wasDisconnected && currentState == GridState.DISCONNECTED -> {
+            !wasDisconnected && confirmedDisconnected -> {
                 log.info("Grid state transition: {} -> DISCONNECTED", lastGridState)
                 wasDisconnected = true
                 lastNotifiedSocThreshold = (soc / 10) * 10
