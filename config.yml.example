@@ -4,7 +4,16 @@ bot:
     - 123456789
     - 987654321
 
+timezone: "Europe/Kyiv"     # Used for /stats day boundaries and times
+
+inverter:
+  dongle-ip: "192.168.0.100"     # Static IP (DHCP reservation) of the EyBond Wi-Fi dongle
+  dongle-udp-port: 58899          # Dongle command port (pairing)
+  tcp-port: 8899                  # Local TCP port the dongle connects to (must be free on the host)
+  modbus-slave: 1
+  poll-interval-seconds: 10       # How often to read inverter registers
+  grid-voltage-threshold: 170     # Grid is considered present when grid voltage >= this (V)
+
 marstek:
   device-ip: "192.168.1.100"   # Static IP of Venus-A on LAN
   udp-port: 30000               # UDP port enabled in Marstek app
-  poll-interval-seconds: 30     # How often to poll the device

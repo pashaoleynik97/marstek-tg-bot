@@ -10,4 +10,4 @@ services:
     restart: unless-stopped
     environment:
       JAVA_OPTS: "-Xmx256m"
-    network_mode: host   # Required for UDP LAN access to Marstek device
+    network_mode: host   # LAN access to Marstek (UDP) + inverter dongle connects back to TCP 8899

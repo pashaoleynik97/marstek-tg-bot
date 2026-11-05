@@ -6,13 +6,18 @@ import com.github.kotlintelegrambot.entities.TelegramFile
 import com.github.kotlintelegrambot.network.fold
 import org.slf4j.LoggerFactory
 
+interface AlertSink {
+    fun send(message: String)
+    fun sendWithPhoto(message: String, imageResourcePath: String)
+}
+
 class Notifier(
     private val bot: Bot,
     private val chatIds: List<Long>
-) {
+) : AlertSink {
     private val log = LoggerFactory.getLogger(Notifier::class.java)
 
-    fun send(message: String) {
+    override fun send(message: String) {
         for (chatId in chatIds) {
             try {
                 bot.sendMessage(
@@ -28,7 +33,7 @@ class Notifier(
         }
     }
 
-    fun sendWithPhoto(message: String, imageResourcePath: String) {
+    override fun sendWithPhoto(message: String, imageResourcePath: String) {
         val imageBytes = Notifier::class.java.getResourceAsStream(imageResourcePath)?.readBytes()
         if (imageBytes == null) {
             log.warn("Image resource not found: {} — falling back to text", imageResourcePath)

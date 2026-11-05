@@ -9,7 +9,20 @@ import java.io.File
 data class AppConfig(
     val bot: BotConfig,
     val marstek: MarstekConfig,
-    val database: DatabaseConfig = DatabaseConfig()
+    val inverter: InverterConfig,
+    val database: DatabaseConfig = DatabaseConfig(),
+    /** IANA zone used for stats day boundaries and HH:mm times. */
+    val timezone: String = "Europe/Kyiv"
+)
+
+@Serializable
+data class InverterConfig(
+    @SerialName("dongle-ip") val dongleIp: String,
+    @SerialName("dongle-udp-port") val dongleUdpPort: Int = 58899,
+    @SerialName("tcp-port") val tcpPort: Int = 8899,
+    @SerialName("modbus-slave") val modbusSlave: Int = 1,
+    @SerialName("poll-interval-seconds") val pollIntervalSeconds: Long = 10,
+    @SerialName("grid-voltage-threshold") val gridVoltageThreshold: Double = 170.0
 )
 
 @Serializable
@@ -27,6 +40,7 @@ data class BotConfig(
 data class MarstekConfig(
     @SerialName("device-ip") val deviceIp: String,
     @SerialName("udp-port") val udpPort: Int = 30000,
+    /** No longer used (Marstek is only queried on /status); kept for config compatibility. */
     @SerialName("poll-interval-seconds") val pollIntervalSeconds: Long = 30
 )
 
