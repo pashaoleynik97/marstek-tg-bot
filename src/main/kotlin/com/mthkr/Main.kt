@@ -1,19 +1,24 @@
 package com.mthkr
 
+import com.github.kotlintelegrambot.entities.BotCommand
+import com.mthkr.bot.BotDependencies
 import com.mthkr.bot.buildBot
 import com.mthkr.config.loadConfig
 import com.mthkr.db.BotOnlineRepository
-import com.mthkr.db.GridStateRepository
+import com.mthkr.db.InverterStateRepository
+import com.mthkr.inverter.InverterConnection
 import com.mthkr.marstek.MarstekClient
-import com.mthkr.monitor.GridMonitor
-import com.mthkr.monitor.GridState
+import com.mthkr.monitor.InverterMonitor
+import com.mthkr.monitor.gapToleranceMs
 import com.mthkr.notifications.Notifier
+import com.mthkr.stats.StatsService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
+import java.time.ZoneId
 
 class Main
 
@@ -32,39 +37,75 @@ fun main(args: Array<String>) {
         return
     }
 
+    val zone = try {
+        ZoneId.of(config.timezone)
+    } catch (e: Exception) {
+        System.err.println("Invalid timezone '${config.timezone}': ${e.message}")
+        System.exit(1)
+        return
+    }
+
     val marstekClient = MarstekClient(
         deviceIp = config.marstek.deviceIp,
         udpPort = config.marstek.udpPort
     )
 
-    // GridMonitor is created first; bot references its state via a lambda.
-    // This breaks the circular dependency: GridMonitor -> Notifier -> Bot -> GridMonitor.
-    // Use a nullable var (not lateinit) so the lambda can safely check before gridMonitor is assigned.
-    var gridMonitor: GridMonitor? = null
+    val inverterConfig = config.inverter
+    val inverterConnection = InverterConnection(
+        dongleIp = inverterConfig.dongleIp,
+        dongleUdpPort = inverterConfig.dongleUdpPort,
+        tcpPort = inverterConfig.tcpPort,
+        modbusSlave = inverterConfig.modbusSlave
+    )
+    val inverterRepository = InverterStateRepository(config.database.dbPath)
+    val botOnlineRepository = BotOnlineRepository(config.database.dbPath)
+    val statsService = StatsService(
+        repository = inverterRepository,
+        zone = zone,
+        gapMs = gapToleranceMs(inverterConfig.pollIntervalSeconds)
+    )
+
+    // The monitor needs the notifier (which needs the bot), and the bot reads monitor state —
+    // break the cycle with a nullable var referenced from lambdas.
+    var inverterMonitor: InverterMonitor? = null
 
     val bot = buildBot(
         token = config.bot.tgBotToken,
         allowedChatIds = chatIds,
-        marstekClient = marstekClient,
-        gridStateProvider = { gridMonitor?.getLastGridState() ?: GridState.UNKNOWN }
+        deps = BotDependencies(
+            marstekClient = marstekClient,
+            inverterSnapshotProvider = { inverterMonitor?.getLatestSnapshot() },
+            gridStateProvider = { inverterMonitor?.getGridState() },
+            statsServiceProvider = { statsService }
+        )
     )
 
     val notifier = Notifier(bot = bot, chatIds = chatIds)
 
-    val repository = GridStateRepository(config.database.dbPath)
-    val botOnlineRepository = BotOnlineRepository(config.database.dbPath)
-
-    val monitor = GridMonitor(
-        client = marstekClient,
+    val monitor = InverterMonitor(
+        source = inverterConnection,
         notifier = notifier,
-        pollIntervalSeconds = config.marstek.pollIntervalSeconds,
-        repository = repository
+        repository = inverterRepository,
+        pollIntervalSeconds = inverterConfig.pollIntervalSeconds,
+        gridVoltageThreshold = inverterConfig.gridVoltageThreshold
     )
-    gridMonitor = monitor
+    inverterMonitor = monitor
 
-    log.info("Starting Marstek Venus-A bot...")
-    log.info("Device: {}:{}", config.marstek.deviceIp, config.marstek.udpPort)
-    log.info("Poll interval: {}s", config.marstek.pollIntervalSeconds)
+    bot.setMyCommands(
+        listOf(
+            BotCommand("status", "Inverter + Marstek status"),
+            BotCommand("stats", "Outage statistics"),
+            BotCommand("menu", "Show button menu")
+        )
+    ).fold(
+        ifSuccess = { log.info("Bot commands registered") },
+        ifError = { log.warn("Failed to register bot commands: {}", it) }
+    )
+
+    log.info("Starting Marstek / inverter bot...")
+    log.info("Marstek device: {}:{}", config.marstek.deviceIp, config.marstek.udpPort)
+    log.info("Inverter dongle: {} (TCP server :{}, poll {}s)", inverterConfig.dongleIp, inverterConfig.tcpPort, inverterConfig.pollIntervalSeconds)
+    log.info("Timezone: {}", zone)
     log.info("Notification targets: {}", chatIds)
 
     val now = System.currentTimeMillis()
