@@ -14,6 +14,12 @@ inverter:
   poll-interval-seconds: 10       # How often to read inverter registers
   grid-voltage-threshold: 170     # Grid is considered present when grid voltage >= this (V)
 
+forecast:                         # Optional; values below are the defaults
+  battery-capacity-wh: 10000      # Usable battery energy 100% -> 0%, Wh
+  cutoff-soc: 12                  # Forecast time until battery reaches this %
+  sample-interval-minutes: 5      # History sample interval while on battery (Smart forecast)
+  retention-days: 7               # Older history samples are deleted
+
 marstek:
   device-ip: "192.168.1.100"   # Static IP of Venus-A on LAN
   udp-port: 30000               # UDP port enabled in Marstek app

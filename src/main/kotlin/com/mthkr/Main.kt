@@ -4,8 +4,11 @@ import com.github.kotlintelegrambot.entities.BotCommand
 import com.mthkr.bot.BotDependencies
 import com.mthkr.bot.buildBot
 import com.mthkr.config.loadConfig
+import com.mthkr.db.BatterySampleRepository
 import com.mthkr.db.BotOnlineRepository
 import com.mthkr.db.InverterStateRepository
+import com.mthkr.forecast.BatterySampleRecorder
+import com.mthkr.forecast.ForecastService
 import com.mthkr.inverter.InverterConnection
 import com.mthkr.marstek.MarstekClient
 import com.mthkr.monitor.InverterMonitor
@@ -67,9 +70,19 @@ fun main(args: Array<String>) {
         gapMs = gapToleranceMs(inverterConfig.pollIntervalSeconds)
     )
 
+    val forecastConfig = config.forecast
+    val batterySampleRepository = BatterySampleRepository(config.database.dbPath)
+
     // The monitor needs the notifier (which needs the bot), and the bot reads monitor state —
     // break the cycle with a nullable var referenced from lambdas.
     var inverterMonitor: InverterMonitor? = null
+    val forecastService = ForecastService(
+        repository = batterySampleRepository,
+        config = forecastConfig,
+        zone = zone,
+        snapshotProvider = { inverterMonitor?.getLatestSnapshot() },
+        gridStateProvider = { inverterMonitor?.getGridState() }
+    )
 
     val bot = buildBot(
         token = config.bot.tgBotToken,
@@ -78,7 +91,8 @@ fun main(args: Array<String>) {
             marstekClient = marstekClient,
             inverterSnapshotProvider = { inverterMonitor?.getLatestSnapshot() },
             gridStateProvider = { inverterMonitor?.getGridState() },
-            statsServiceProvider = { statsService }
+            statsServiceProvider = { statsService },
+            forecastServiceProvider = { forecastService }
         )
     )
 
@@ -89,7 +103,12 @@ fun main(args: Array<String>) {
         notifier = notifier,
         repository = inverterRepository,
         pollIntervalSeconds = inverterConfig.pollIntervalSeconds,
-        gridVoltageThreshold = inverterConfig.gridVoltageThreshold
+        gridVoltageThreshold = inverterConfig.gridVoltageThreshold,
+        sampleRecorder = BatterySampleRecorder(
+            repository = batterySampleRepository,
+            intervalMs = forecastConfig.sampleIntervalMinutes * 60_000L,
+            retentionMs = forecastConfig.retentionDays * 86_400_000L
+        )
     )
     inverterMonitor = monitor
 
@@ -108,6 +127,7 @@ fun main(args: Array<String>) {
     log.info("Marstek device: {}:{}", config.marstek.deviceIp, config.marstek.udpPort)
     log.info("Inverter dongle: {} (TCP server :{}, poll {}s)", inverterConfig.dongleIp, inverterConfig.tcpPort, inverterConfig.pollIntervalSeconds)
     log.info("Timezone: {}", zone)
+    log.info("Forecast: battery {} Wh, cutoff {}%", forecastConfig.batteryCapacityWh, forecastConfig.cutoffSoc)
     log.info("Notification targets: {}", chatIds)
 
     val now = System.currentTimeMillis()

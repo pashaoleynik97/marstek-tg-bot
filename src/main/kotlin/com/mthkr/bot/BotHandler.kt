@@ -14,6 +14,7 @@ import com.github.kotlintelegrambot.entities.ReplyMarkup
 import com.github.kotlintelegrambot.entities.TelegramFile
 import com.github.kotlintelegrambot.entities.keyboard.InlineKeyboardButton
 import com.github.kotlintelegrambot.entities.keyboard.KeyboardButton
+import com.mthkr.forecast.ForecastService
 import com.mthkr.inverter.InverterMode
 import com.mthkr.inverter.InverterSnapshot
 import com.mthkr.marstek.MarstekClient
@@ -36,13 +37,17 @@ private const val BTN_STATISTIC = "📅 Statistic"
 private const val BTN_TODAY = "Today"
 private const val BTN_WEEK = "7 days"
 private const val BTN_MONTH = "Month"
+private const val BTN_FORECAST = "🔮 Forecast"
+private const val BTN_CURRENT_USAGE = "⚡ Current usage"
+private const val BTN_SMART_FORECAST = "🧠 Smart forecast"
 private const val BTN_BACK = "⬅️ Back"
 
 private enum class StatsKind { SUMMARY, STATISTIC }
 
-/** Reply-keyboard navigation level per chat: null = root, STATS = Summary/Statistic, kind = period level. */
+/** Reply-keyboard navigation level per chat: null = root, Stats/Forecast = submenus, Period = period level. */
 private sealed interface MenuLevel {
     data object Stats : MenuLevel
+    data object Forecast : MenuLevel
     data class Period(val kind: StatsKind) : MenuLevel
 }
 
@@ -52,6 +57,7 @@ class BotDependencies(
     val inverterSnapshotProvider: () -> InverterSnapshot?,
     val gridStateProvider: () -> GridState?,
     val statsServiceProvider: () -> StatsService,
+    val forecastServiceProvider: () -> ForecastService,
 )
 
 fun buildBot(
@@ -94,6 +100,11 @@ fun buildBot(
                     menuLevels[chatId] = MenuLevel.Stats
                     bot.sendMessage(id, "📈 Stats — choose a report:", replyMarkup = statsKeyboard())
                 }
+                BTN_FORECAST -> {
+                    menuLevels[chatId] = MenuLevel.Forecast
+                    bot.sendMessage(id, "🔮 Forecast — choose a type:", replyMarkup = forecastKeyboard())
+                }
+                BTN_CURRENT_USAGE, BTN_SMART_FORECAST -> sendForecast(bot, id, text == BTN_SMART_FORECAST, deps)
                 BTN_SUMMARY, BTN_STATISTIC -> {
                     val kind = if (text == BTN_SUMMARY) StatsKind.SUMMARY else StatsKind.STATISTIC
                     menuLevels[chatId] = MenuLevel.Period(kind)
@@ -196,6 +207,16 @@ private fun sendInfographic(bot: Bot, chatId: ChatId, report: StatsReport) {
     }
 }
 
+private fun sendForecast(bot: Bot, chatId: ChatId, smart: Boolean, deps: BotDependencies) {
+    try {
+        val forecast = deps.forecastServiceProvider()
+        bot.sendMessage(chatId, if (smart) forecast.smartForecast() else forecast.currentUsage())
+    } catch (e: Exception) {
+        log.error("Failed to build forecast: {}", e.message, e)
+        bot.sendMessage(chatId, "⚠️ Failed to build forecast: ${e.message}")
+    }
+}
+
 // ---------------------------------------------------------------- keyboards
 
 private fun replyKeyboard(vararg rows: List<String>): ReplyMarkup =
@@ -204,7 +225,8 @@ private fun replyKeyboard(vararg rows: List<String>): ReplyMarkup =
         resizeKeyboard = true,
     )
 
-private fun rootKeyboard() = replyKeyboard(listOf(BTN_STATUS, BTN_STATS))
+private fun rootKeyboard() = replyKeyboard(listOf(BTN_STATUS, BTN_STATS, BTN_FORECAST))
+private fun forecastKeyboard() = replyKeyboard(listOf(BTN_CURRENT_USAGE, BTN_SMART_FORECAST), listOf(BTN_BACK))
 private fun statsKeyboard() = replyKeyboard(listOf(BTN_SUMMARY, BTN_STATISTIC), listOf(BTN_BACK))
 private fun periodKeyboard() = replyKeyboard(listOf(BTN_TODAY, BTN_WEEK, BTN_MONTH), listOf(BTN_BACK))
 

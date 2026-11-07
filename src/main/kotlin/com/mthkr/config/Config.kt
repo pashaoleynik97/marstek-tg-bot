@@ -11,6 +11,7 @@ data class AppConfig(
     val marstek: MarstekConfig,
     val inverter: InverterConfig,
     val database: DatabaseConfig = DatabaseConfig(),
+    val forecast: ForecastConfig = ForecastConfig(),
     /** IANA zone used for stats day boundaries and HH:mm times. */
     val timezone: String = "Europe/Kyiv"
 )
@@ -23,6 +24,18 @@ data class InverterConfig(
     @SerialName("modbus-slave") val modbusSlave: Int = 1,
     @SerialName("poll-interval-seconds") val pollIntervalSeconds: Long = 10,
     @SerialName("grid-voltage-threshold") val gridVoltageThreshold: Double = 170.0
+)
+
+@Serializable
+data class ForecastConfig(
+    /** Usable battery energy from 100 % to 0 %, Wh. */
+    @SerialName("battery-capacity-wh") val batteryCapacityWh: Double = 10_000.0,
+    /** Forecasts estimate time until the battery reaches this SoC, %. */
+    @SerialName("cutoff-soc") val cutoffSoc: Int = 12,
+    /** How often a history sample is recorded while running on battery. */
+    @SerialName("sample-interval-minutes") val sampleIntervalMinutes: Long = 5,
+    /** Samples older than this are deleted. */
+    @SerialName("retention-days") val retentionDays: Long = 7
 )
 
 @Serializable

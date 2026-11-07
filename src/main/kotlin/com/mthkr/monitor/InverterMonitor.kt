@@ -2,6 +2,7 @@ package com.mthkr.monitor
 
 import com.mthkr.db.GridInterval
 import com.mthkr.db.InverterStateRepository
+import com.mthkr.forecast.BatterySampleRecorder
 import com.mthkr.inverter.InverterSnapshot
 import com.mthkr.inverter.InverterSource
 import com.mthkr.notifications.AlertSink
@@ -29,6 +30,7 @@ class InverterMonitor(
     private val repository: InverterStateRepository,
     private val pollIntervalSeconds: Long,
     private val gridVoltageThreshold: Double,
+    private val sampleRecorder: BatterySampleRecorder? = null,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val log = LoggerFactory.getLogger(InverterMonitor::class.java)
@@ -130,6 +132,7 @@ class InverterMonitor(
         }
 
         handleBatteryThresholds(snapshot.batterySoc)
+        sampleRecorder?.onSnapshot(snapshot, confirmedState, now)
     }
 
     private fun recordObservation(state: GridState, now: Long, soc: Int) {
