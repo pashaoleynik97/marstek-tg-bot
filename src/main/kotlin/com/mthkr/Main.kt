@@ -23,6 +23,8 @@ import java.time.ZoneId
 class Main
 
 fun main(args: Array<String>) {
+    // Infographics are rendered with Java2D; no display is available on the server.
+    System.setProperty("java.awt.headless", "true")
     val log = LoggerFactory.getLogger(Main::class.java)
 
     val configPath = if (args.size >= 2 && args[0] == "--config") args[1] else "config.yml"

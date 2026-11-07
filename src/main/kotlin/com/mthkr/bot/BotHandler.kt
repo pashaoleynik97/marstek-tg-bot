@@ -9,14 +9,18 @@ import com.github.kotlintelegrambot.dispatcher.text
 import com.github.kotlintelegrambot.entities.ChatId
 import com.github.kotlintelegrambot.entities.InlineKeyboardMarkup
 import com.github.kotlintelegrambot.entities.KeyboardReplyMarkup
+import com.github.kotlintelegrambot.entities.ParseMode
 import com.github.kotlintelegrambot.entities.ReplyMarkup
+import com.github.kotlintelegrambot.entities.TelegramFile
 import com.github.kotlintelegrambot.entities.keyboard.InlineKeyboardButton
 import com.github.kotlintelegrambot.entities.keyboard.KeyboardButton
 import com.mthkr.inverter.InverterMode
 import com.mthkr.inverter.InverterSnapshot
 import com.mthkr.marstek.MarstekClient
 import com.mthkr.monitor.GridState
+import com.mthkr.stats.InfographicRenderer
 import com.mthkr.stats.StatsPeriod
+import com.mthkr.stats.StatsReport
 import com.mthkr.stats.StatsService
 import org.slf4j.LoggerFactory
 import java.util.Locale
@@ -165,14 +169,30 @@ private fun sendStats(bot: Bot, chatId: Long, kind: StatsKind, period: StatsPeri
     val id = ChatId.fromId(chatId)
     try {
         val stats = deps.statsServiceProvider()
-        val messages = when (kind) {
-            StatsKind.SUMMARY -> listOf(stats.summary(period))
-            StatsKind.STATISTIC -> stats.statistic(period)
+        when (kind) {
+            StatsKind.SUMMARY -> bot.sendMessage(id, stats.summary(period))
+            StatsKind.STATISTIC -> {
+                val report = stats.report(period)
+                sendInfographic(bot, id, report)
+                stats.statistic(report).forEach { bot.sendMessage(id, it, parseMode = ParseMode.HTML) }
+            }
         }
-        messages.forEach { bot.sendMessage(id, it) }
     } catch (e: Exception) {
         log.error("Failed to build stats: {}", e.message, e)
         bot.sendMessage(id, "⚠️ Failed to build stats: ${e.message}")
+    }
+}
+
+/** Renders the infographic in memory and sends it; failures are logged and don't block the text statistic. */
+private fun sendInfographic(bot: Bot, chatId: ChatId, report: StatsReport) {
+    try {
+        val png = InfographicRenderer.render(report)
+        // Cast hides retrofit's Response type (not on our compile classpath).
+        val result: Any = bot.sendPhoto(chatId, TelegramFile.ByByteArray(png, "stats-${report.period.name.lowercase()}.png"))
+        val error = (result as Pair<*, *>).second as? Exception
+        if (error != null) log.warn("Failed to send infographic: {}", error.message)
+    } catch (e: Exception) {
+        log.error("Failed to render infographic: {}", e.message, e)
     }
 }
 

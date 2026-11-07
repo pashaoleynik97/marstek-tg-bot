@@ -129,8 +129,17 @@ docker-compose down
   (all in the configured timezone, starting no earlier than the first recorded data).
 - **Summary**: `There were X hours Y minutes of outages during <period>. Time without outages: X hours Y minutes.`
   (plus `❔ No data: …` if there were gaps).
-- **Statistic**: per day (newest first) a timeline of `❌ Outage HH:mm-HH:mm`, `⚡ Presence: HH:mm-HH:mm`
-  and `❔ No data HH:mm-HH:mm` (time when the bot was down or the inverter was unreachable).
+- **Statistic**: an infographic (1080×1080 PNG, rendered in memory with Java2D, never written to disk) followed by text:
+  - **Today**: pie (outage vs presence) + 00:00–24:00 timeline; text lists `❌ Outage: HH:mm-HH:mm (Xh Ym)`,
+    `⚡ Presence: …`, `❔ No data: …` (time when the bot was down or the inverter was unreachable).
+  - **7 days**: 7 timelines (newest on top); text = totals with outage/presence % + per-day timeline (newest first).
+  - **Month**: pie; text = `Outages from DD-Month-YYYY to DD-Month-YYYY`, totals, per-day outage/presence durations.
+
+Preview the infographics with synthetic data (on demand, not part of `./gradlew test`):
+
+```bash
+./gradlew previewInfographics && open build/infographics
+```
 
 ---
 
@@ -173,7 +182,8 @@ src/main/kotlin/com/mthkr/
 │   └── BotOnlineRepository.kt       ← last-online timestamp
 ├── stats/
 │   ├── Timeline.kt                  ← Builds outage/presence/no-data segments
-│   └── StatsService.kt              ← /stats texts
+│   ├── StatsService.kt              ← /stats texts + StatsReport read model
+│   └── InfographicRenderer.kt       ← Java2D pie/timeline PNGs (in memory)
 ├── bot/BotHandler.kt                ← /status, /stats, /menu handlers + keyboards
 └── notifications/Notifier.kt        ← Telegram message sender
 ```

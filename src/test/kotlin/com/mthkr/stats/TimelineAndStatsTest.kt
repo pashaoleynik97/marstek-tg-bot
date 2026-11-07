@@ -59,6 +59,15 @@ class TimelineTest {
     fun `hours minutes format`() {
         assertEquals("1 hours 45 minutes", formatHoursMinutes(105 * MIN + 30_000))
         assertEquals("0 hours 0 minutes", formatHoursMinutes(0))
+        assertEquals("3h 20m", formatShort(200 * MIN + 59_000))
+        assertEquals("0h 2m", formatShort(2 * MIN))
+    }
+
+    @Test
+    fun `percentages sum to 100`() {
+        assertEquals(57 to 43, percentages(4 * MIN, 3 * MIN))
+        assertEquals(0 to 100, percentages(0, 5 * MIN))
+        assertEquals(null, percentages(0, 0))
     }
 }
 
@@ -84,11 +93,11 @@ class StatsServiceTest {
         val s = StatsService(r, zone, GAP) { now }
         assertEquals(
             listOf(
-                "There were 2 hours 45 minutes of outages during this day.\n" +
-                    "⚡ Presence: 00:00-12:00\n" +
-                    "❌ Outage 12:00-13:45\n" +
-                    "⚡ Presence: 13:45-18:00\n" +
-                    "❌ Outage 18:00-now"
+                "There were 2 hours 45 minutes of outages during this day.\n\n" +
+                    "⚡ Presence: 00:00-12:00 (12h 0m)\n" +
+                    "❌ Outage: 12:00-13:45 (1h 45m)\n" +
+                    "⚡ Presence: 13:45-18:00 (4h 15m)\n" +
+                    "❌ Outage: 18:00-now (1h 0m)"
             ),
             s.statistic(StatsPeriod.TODAY)
         )
@@ -99,7 +108,7 @@ class StatsServiceTest {
     }
 
     @Test
-    fun `week statistic is newest first, splits at midnight and skips days before first data`() {
+    fun `week and month statistic are newest first, splits at midnight and skips days before first data`() {
         val r = repo()
         // Outage across midnight 3rd → 4th, nothing recorded before 3rd 20:00.
         r.insert(GridState.CONNECTED, ts(2026, 11, 3, 20, 0), ts(2026, 11, 3, 22, 0), 100)
@@ -111,14 +120,38 @@ class StatsServiceTest {
         val msgs = s.statistic(StatsPeriod.WEEK)
         assertEquals(1, msgs.size)
         assertEquals(
-            "There were 2 hours 0 minutes of outages during 04.11.2026 Wednesday.\n" +
-                "❌ Outage 00:00-02:00\n" +
-                "⚡ Presence: 02:00-now\n" +
-                "---\n" +
-                "There were 2 hours 0 minutes of outages during 03.11.2026 Tuesday.\n" +
-                "⚡ Presence: 20:00-22:00\n" +
-                "❌ Outage 22:00-00:00",
+            "There were 4 hours 0 minutes of outages during last 2 days.\n" +
+                "Outage: 57%\n" +
+                "Presence: 43%\n" +
+                "\n" +
+                "<b>04.11.2026 Wednesday</b>\n" +
+                "<i>2 hours 0 minutes of outages</i>\n" +
+                "❌ Outage: 00:00-02:00 (2h 0m)\n" +
+                "⚡ Presence: 02:00-now (1h 0m)\n" +
+                "----------\n" +
+                "\n" +
+                "<b>03.11.2026 Tuesday</b>\n" +
+                "<i>2 hours 0 minutes of outages</i>\n" +
+                "⚡ Presence: 20:00-22:00 (2h 0m)\n" +
+                "❌ Outage: 22:00-00:00 (2h 0m)",
             msgs[0]
+        )
+        assertEquals(
+            listOf(
+                "Outages from 03-November-2026 to 04-November-2026\n" +
+                    "\n" +
+                    "<i>Total outages:</i> 4h 0m\n" +
+                    "<i>Total presence:</i> 3h 0m\n" +
+                    "\n" +
+                    "<b>04.11.2026 Wednesday</b>\n" +
+                    "❌ Outage: 2h 0m\n" +
+                    "⚡ Presence: 1h 0m\n" +
+                    "\n" +
+                    "<b>03.11.2026 Tuesday</b>\n" +
+                    "❌ Outage: 2h 0m\n" +
+                    "⚡ Presence: 2h 0m"
+            ),
+            s.statistic(StatsPeriod.MONTH)
         )
         val summary = s.summary(StatsPeriod.WEEK)
         assertTrue(summary.startsWith("There were 4 hours 0 minutes of outages during last 7 days. Time without outages: 3 hours 0 minutes."), summary)
@@ -132,10 +165,10 @@ class StatsServiceTest {
         r.insert(GridState.CONNECTED, ts(2026, 11, 5, 5, 40), now, 100)
         val s = StatsService(r, zone, GAP) { now }
         assertEquals(
-            "There were 0 hours 0 minutes of outages during this day.\n" +
-                "⚡ Presence: 00:00-03:10\n" +
-                "❔ No data 03:10-05:40\n" +
-                "⚡ Presence: 05:40-now",
+            "There were 0 hours 0 minutes of outages during this day.\n\n" +
+                "⚡ Presence: 00:00-03:10 (3h 10m)\n" +
+                "❔ No data: 03:10-05:40 (2h 30m)\n" +
+                "⚡ Presence: 05:40-now (0h 20m)",
             s.statistic(StatsPeriod.TODAY).single()
         )
         assertTrue(s.summary(StatsPeriod.TODAY).endsWith("❔ No data: 2 hours 30 minutes."))
