@@ -39,7 +39,20 @@ application {
 }
 
 tasks.test {
-    useJUnitPlatform()
+    useJUnitPlatform { excludeTags("infographic-preview") }
+    systemProperty("java.awt.headless", "true")
+}
+
+// On-demand: renders sample infographics to build/infographics/ for visual review.
+val previewInfographics by tasks.registering(Test::class) {
+    description = "Renders sample infographics to build/infographics/"
+    group = "verification"
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform { includeTags("infographic-preview") }
+    systemProperty("java.awt.headless", "true")
+    systemProperty("infographic.outDir", layout.buildDirectory.dir("infographics").get().asFile.absolutePath)
+    outputs.upToDateWhen { false }
 }
 
 tasks.shadowJar {
