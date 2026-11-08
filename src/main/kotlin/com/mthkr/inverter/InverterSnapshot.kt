@@ -8,6 +8,10 @@ enum class InverterMode(val code: Int) {
     }
 }
 
+/** Battery current is negative while discharging (verified on real data). */
+fun dischargeW(batteryVoltage: Double, batteryCurrent: Double): Double =
+    if (batteryCurrent < 0) -batteryVoltage * batteryCurrent else 0.0
+
 /** Live values decoded from holding registers 201..234 (SRNE / SMG II register map). */
 data class InverterSnapshot(
     val modeCode: Int,
@@ -30,7 +34,15 @@ data class InverterSnapshot(
 ) {
     val mode: InverterMode get() = InverterMode.of(modeCode)
 
+    /** Output power, or null when the inverter reports 0xFFFF ("not available" — usual on grid/bypass). */
+    val validOutputPower: Int? get() = outputPower.takeIf { it <= MAX_VALID_POWER_W }
+
+    /** Power drawn from the battery (DC side, includes inverter losses); 0 when not discharging. */
+    val batteryDischargeW: Double get() = dischargeW(batteryVoltage, batteryCurrent)
+
     companion object {
+        /** Anything above is an invalid register read (0xFFFF = 65535). */
+        const val MAX_VALID_POWER_W = 20_000
         const val START_REGISTER = 201
         const val REGISTER_COUNT = 34 // 201..234
 

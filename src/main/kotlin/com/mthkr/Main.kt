@@ -107,7 +107,8 @@ fun main(args: Array<String>) {
         sampleRecorder = BatterySampleRecorder(
             repository = batterySampleRepository,
             intervalMs = forecastConfig.sampleIntervalMinutes * 60_000L,
-            retentionMs = forecastConfig.retentionDays * 86_400_000L
+            retentionMs = forecastConfig.retentionDays * 86_400_000L,
+            gridVoltageThreshold = inverterConfig.gridVoltageThreshold
         )
     )
     inverterMonitor = monitor

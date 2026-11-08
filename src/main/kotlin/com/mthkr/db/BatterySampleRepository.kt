@@ -1,11 +1,15 @@
 package com.mthkr.db
 
+import com.mthkr.inverter.InverterSnapshot
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.sql.Connection
 import java.sql.DriverManager
 
-/** One history point recorded while running on battery. Timestamp is epoch ms. */
+/**
+ * One history point recorded while running on battery. Timestamp is epoch ms.
+ * `loadW` is stored raw (may be 65535 = invalid) — use [validLoadW]; forecasts use [dischargeW].
+ */
 data class BatterySample(
     val ts: Long,
     val soc: Int,
@@ -14,8 +18,12 @@ data class BatterySample(
     val batteryV: Double,
     val batteryA: Double,
 ) {
-    /** Power actually drawn from the battery (load not covered by PV). */
-    val drainW: Int get() = maxOf(0, loadW - pvW)
+    val validLoadW: Int? get() = loadW.takeIf { it <= InverterSnapshot.MAX_VALID_POWER_W }
+
+    val isDischarging: Boolean get() = batteryA < 0
+
+    /** DC power drawn from the battery, W; 0 when not discharging. */
+    val dischargeW: Double get() = com.mthkr.inverter.dischargeW(batteryV, batteryA)
 }
 
 /** Battery-mode history used by the Smart forecast. */

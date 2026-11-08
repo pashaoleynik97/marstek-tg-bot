@@ -1,19 +1,26 @@
 package com.mthkr.forecast
 
 import com.mthkr.config.ForecastConfig
+import com.mthkr.db.BatterySample
 import com.mthkr.db.BatterySampleRepository
 import com.mthkr.inverter.InverterSnapshot
 import com.mthkr.monitor.GridState
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 private const val RECENT_WINDOW_MS = 30 * 60_000L
+private const val DAY_MS = 86_400_000L
 private val TIME = DateTimeFormatter.ofPattern("HH:mm")
 private val DATE_TIME = DateTimeFormatter.ofPattern("dd.MM HH:mm")
 private const val NOT_REACHABLE = "⚠️ Inverter not reachable (no fresh data from the dongle)."
 
-/** Builds the Forecast menu replies (Current usage / Smart forecast). */
+/** Usable Wh per 1 % SoC and whether it was learned from history (else config). */
+private data class Capacity(val whPerPercent: Double, val learned: Boolean)
+
+/** Builds the Forecast menu replies (Current usage / Smart forecast). All drain values are DC battery power. */
 class ForecastService(
     private val repository: BatterySampleRepository,
     private val config: ForecastConfig,
@@ -24,18 +31,22 @@ class ForecastService(
 ) {
     private val nominalWhPerPercent = config.batteryCapacityWh / 100.0
     private val intervalMs = config.sampleIntervalMinutes * 60_000L
-    private val retentionMs = config.retentionDays * 86_400_000L
+    private val retentionMs = config.retentionDays * DAY_MS
+    private val capacityWindowMs = config.capacityWindowDays * DAY_MS
+    private val capacityHalfLifeMs = (config.capacityHalfLifeDays * DAY_MS).roundToLong()
+    private val profileHalfLifeMs = (config.profileHalfLifeDays * DAY_MS).roundToLong()
 
     fun currentUsage(): String {
         val snapshot = snapshotProvider() ?: return NOT_REACHABLE
         noForecastReason(snapshot)?.let { return it }
         val now = clock()
-        val drain = drainW(snapshot)
-        val header = "Current usage: ${snapshot.outputPower} W" + solarLine(snapshot, drain)
-        val energy = ForecastCalculator.availableWh(snapshot.batterySoc, config.cutoffSoc, nominalWhPerPercent)
-        val estimate = ForecastCalculator.constantLoad(energy, drain.toDouble())
-            ?: return "$header\n🌤 No battery drain right now."
-        return "$header\n${estimateLines(estimate, now)}"
+        val drain = snapshot.batteryDischargeW
+        val header = "Current usage: ${loadText(snapshot)}"
+        if (drain <= 0.0) return "$header\n🌤 Battery is not discharging right now."
+        val capacity = capacity(repository.findSince(now - capacityWindowMs), now)
+        val energy = ForecastCalculator.availableWh(snapshot.batterySoc, config.cutoffSoc, capacity.whPerPercent)
+        val estimate = ForecastCalculator.constantLoad(energy, drain)!!
+        return "$header\nBattery drain: ${drain.roundToInt()} W\n${estimateLines(estimate, now)}"
     }
 
     fun smartForecast(): String {
@@ -43,19 +54,27 @@ class ForecastService(
         noForecastReason(snapshot)?.let { return it }
         val now = clock()
         val samples = repository.findSince(now - retentionMs)
-        val profile = ForecastCalculator.hourlyProfile(samples, zone)
+        val profile = ForecastCalculator.hourlyProfile(samples, now, profileHalfLifeMs, zone)
             ?: return "Smart forecast: no history yet, using current usage.\n\n${currentUsage()}"
 
-        val whPerPercent = ForecastCalculator.learnWhPerPercent(samples, intervalMs * 2, nominalWhPerPercent)
-            ?: nominalWhPerPercent
-        val energy = ForecastCalculator.availableWh(snapshot.batterySoc, config.cutoffSoc, whPerPercent)
-        val recent = samples.filter { now - it.ts <= RECENT_WINDOW_MS }.map { it.drainW.toDouble() } +
-            drainW(snapshot).toDouble()
+        val capacity = capacity(samples, now)
+        val energy = ForecastCalculator.availableWh(snapshot.batterySoc, config.cutoffSoc, capacity.whPerPercent)
+        val recent = ForecastCalculator.clean(samples).filter { now - it.ts <= RECENT_WINDOW_MS }.map { it.dischargeW } +
+            snapshot.batteryDischargeW
         val estimate = ForecastCalculator.simulate(now, energy, recent.average(), profile, zone)
 
         val days = ForecastCalculator.daysOfData(samples, zone)
+        val source = if (capacity.learned) "learned" else "config"
         return "Smart forecast based on $days ${if (days == 1) "day" else "days"} data.\n" +
-            estimateLines(estimate, now)
+            estimateLines(estimate, now) + "\n" +
+            "Avg drain ${estimate.avgW.roundToInt()} W · ${capacity.whPerPercent.roundToInt()} Wh/% ($source)"
+    }
+
+    private fun capacity(samples: List<BatterySample>, now: Long): Capacity {
+        val learned = ForecastCalculator.learnWhPerPercent(
+            samples, now, capacityWindowMs, capacityHalfLifeMs, intervalMs * 2, nominalWhPerPercent
+        )
+        return if (learned != null) Capacity(learned, true) else Capacity(nominalWhPerPercent, false)
     }
 
     /** Reply explaining why no forecast can be made, or null if it can. */
@@ -70,10 +89,7 @@ class ForecastService(
             }
     }
 
-    private fun drainW(s: InverterSnapshot) = maxOf(0, s.outputPower - s.pvPower)
-
-    private fun solarLine(s: InverterSnapshot, drain: Int) =
-        if (s.pvPower > 0) "\nSolar: ${s.pvPower} W (battery drain $drain W)" else ""
+    private fun loadText(s: InverterSnapshot) = s.validOutputPower?.let { "$it W" } ?: "n/a"
 
     private fun estimateLines(e: Estimate, now: Long): String {
         val until = formatUntil(now + e.timeLeftMs, now)
