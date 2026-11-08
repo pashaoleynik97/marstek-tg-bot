@@ -28,14 +28,20 @@ data class InverterConfig(
 
 @Serializable
 data class ForecastConfig(
-    /** Usable battery energy from 100 % to 0 %, Wh. */
+    /** Usable battery energy from 100 % to 0 %, Wh — fallback until the capacity is learned from history. */
     @SerialName("battery-capacity-wh") val batteryCapacityWh: Double = 10_000.0,
     /** Forecasts estimate time until the battery reaches this SoC, %. */
     @SerialName("cutoff-soc") val cutoffSoc: Int = 12,
     /** How often a history sample is recorded while running on battery. */
     @SerialName("sample-interval-minutes") val sampleIntervalMinutes: Long = 5,
     /** Samples older than this are deleted. */
-    @SerialName("retention-days") val retentionDays: Long = 7
+    @SerialName("retention-days") val retentionDays: Long = 90,
+    /** Recency weighting of the hourly load profile: a sample's weight halves every N days. */
+    @SerialName("profile-half-life-days") val profileHalfLifeDays: Double = 7.0,
+    /** History window used to learn usable Wh per 1 % SoC. */
+    @SerialName("capacity-window-days") val capacityWindowDays: Long = 30,
+    /** Recency weighting of the capacity learning. */
+    @SerialName("capacity-half-life-days") val capacityHalfLifeDays: Double = 30.0
 )
 
 @Serializable

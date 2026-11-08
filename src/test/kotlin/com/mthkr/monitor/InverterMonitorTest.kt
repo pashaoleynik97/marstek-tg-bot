@@ -1,12 +1,15 @@
 package com.mthkr.monitor
 
+import com.mthkr.db.BatterySampleRepository
 import com.mthkr.db.InverterStateRepository
+import com.mthkr.forecast.BatterySampleRecorder
 import com.mthkr.inverter.InverterSnapshot
 import com.mthkr.inverter.InverterSource
 import com.mthkr.notifications.AlertSink
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 private class RecordingSink : AlertSink {
@@ -111,5 +114,33 @@ class InverterMonitorTest {
         assertEquals("✅ Inverter connection restored", sink.messages[1])
         m.cycle()
         assertEquals(2, sink.messages.size)
+    }
+
+    @Test
+    fun `65535 output power on grid does not break snapshot, detection or recording`() {
+        val dir = Files.createTempDirectory("mon65535").resolve("t.db").toString()
+        val samples = BatterySampleRepository(dir)
+        val recorder = BatterySampleRecorder(samples, 5 * 60_000L, 90 * 86_400_000L, 170.0)
+        val sink = RecordingSink()
+        var now = 1_000_000L
+        val m = InverterMonitor(FakeSource(true), sink, InverterStateRepository(dir), 10, 170.0, recorder) { now }
+        fun onGrid() = snap(230.0, 99).copy(outputPower = 65535, batteryCurrent = -0.7)
+        fun onBattery(soc: Int) = snap(0.0, soc).copy(batteryCurrent = -5.0)
+
+        repeat(3) { now += 10_000; m.onSnapshot(onGrid(), now) }
+        assertEquals(GridState.CONNECTED, m.getGridState())
+        assertEquals(65535, assertNotNull(m.getLatestSnapshot()).outputPower) // live snapshot still updated
+        assertEquals(0, samples.findSince(0).size)                           // nothing recorded on grid
+
+        now += 10_000; m.onSnapshot(onBattery(98), now)
+        now += 10_000; m.onSnapshot(onBattery(98), now)
+        assertEquals(GridState.DISCONNECTED, m.getGridState())
+        assertEquals(1, samples.findSince(0).size)
+
+        now += 10_000; m.onSnapshot(onGrid(), now)
+        now += 10_000; m.onSnapshot(onGrid(), now)
+        assertEquals(GridState.CONNECTED, m.getGridState())
+        assertTrue(sink.messages.last().startsWith("✅ GRID RESTORED"))
+        assertEquals(1, samples.findSince(0).size)
     }
 }

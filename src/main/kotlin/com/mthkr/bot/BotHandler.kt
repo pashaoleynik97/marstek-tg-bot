@@ -269,7 +269,7 @@ internal fun formatInverterSection(s: InverterSnapshot?): String {
     return "🔌 INVERTER:\n\n" +
         "Status: $status\n" +
         "Grid: ${d(s.gridVoltage)} V, ${String.format(Locale.US, "%.2f", s.gridFrequency)} Hz, ${s.gridPower} W\n" +
-        "Output: ${d(s.outputVoltage)} V, ${d(s.outputCurrent)} A, ${s.outputPower} W\n" +
+        "Output: ${d(s.outputVoltage)} V, ${d(s.outputCurrent)} A, ${s.validOutputPower ?: "n/a"} W\n" +
         "Battery: ${d(s.batteryVoltage)} V, ${s.batterySoc}%\n" +
         "PV: ${d(s.pvVoltage)} V, ${s.pvPower} W (charging ${s.pvChargingPower} W)\n" +
         "Temps: inv ${s.inverterTemp}°C, DC ${s.dcTemp}°C"

@@ -15,10 +15,13 @@ inverter:
   grid-voltage-threshold: 170     # Grid is considered present when grid voltage >= this (V)
 
 forecast:                         # Optional; values below are the defaults
-  battery-capacity-wh: 10000      # Usable battery energy 100% -> 0%, Wh
+  battery-capacity-wh: 10000      # Usable battery energy 100% -> 0%, Wh (fallback until learned from history)
   cutoff-soc: 12                  # Forecast time until battery reaches this %
-  sample-interval-minutes: 5      # History sample interval while on battery (Smart forecast)
-  retention-days: 7               # Older history samples are deleted
+  sample-interval-minutes: 5      # History sample interval while on battery
+  retention-days: 90              # Older history samples are deleted
+  profile-half-life-days: 7       # Load pattern: a sample's weight halves every N days
+  capacity-window-days: 30        # History used to learn real Wh per 1% SoC
+  capacity-half-life-days: 30     # Capacity learning: weight halves every N days
 
 marstek:
   device-ip: "192.168.1.100"   # Static IP of Venus-A on LAN
