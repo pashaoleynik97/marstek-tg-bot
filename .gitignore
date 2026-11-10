@@ -7,3 +7,13 @@ config.yml
 .kotlin/
 out/
 /.claude/
+
+# Runtime data (SQLite DB with real grid history)
+data/
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+# macOS
+.DS_Store
